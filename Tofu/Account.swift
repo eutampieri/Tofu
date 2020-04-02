@@ -1,6 +1,6 @@
 import Foundation
 
-class Account {
+final class Account: Codable {
     var persistentRef: Data?
     var name: String?
     var issuer: String?

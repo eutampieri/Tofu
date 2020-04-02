@@ -120,4 +120,18 @@ class Keychain {
         ]
         return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
+    
+    /// This function exports all accounts into JSON
+    func uncryptedExport() throws -> Data {
+        let encoder = JSONEncoder()
+        return try encoder.encode(self.accounts)
+    }
+    
+    /// This function encrypts the exported data using the provided password
+    func export(password: String) throws -> Data {
+        // I was "inspired" by https://github.com/DigitalLeaves/CommonCrypto-in-Swift
+        let json = try self.uncryptedExport()
+        let helper = CryptoHelper()
+        return helper.encrypt(password: password, data: json)
+    }
 }

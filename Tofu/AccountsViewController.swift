@@ -14,7 +14,10 @@ class AccountsViewController: UITableViewController, UIImagePickerControllerDele
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
+        do {
+            print("B64exported: \(try keychain.uncryptedExport().base64EncodedString())")
+            print("B64encrypted: \(try keychain.export(password: "password").base64EncodedString())")
+        } catch { print("FAILED DUMP")}
         accounts = keychain.accounts
         let sortedPersistentRefs = UserDefaults.standard.array(forKey: accountOrderKey) as? [Data] ?? []
         accounts.sort { a, b in
