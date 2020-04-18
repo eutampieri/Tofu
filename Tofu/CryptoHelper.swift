@@ -15,15 +15,19 @@ final class CryptoConstants {
     internal static let Options = CCOptions(kCCOptionPKCS7Padding)
     internal static let BlockSize = kCCBlockSizeAES128 // AES256 uses the same block size as AES128
     internal static let IVSize = CryptoConstants.BlockSize // AES IV size is same as block size
-
-    internal static let RandomStringCharSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 }
 
 // Based on https://github.com/DigitalLeaves/CommonCrypto-in-Swift
 final class CryptoHelper {
-    // Based on https://stackoverflow.com/questions/26845307/generate-random-alphanumeric-string-in-swift
-    internal static func randomString(length: Int) -> String {
-        return String((0..<length).map{ _ in CryptoConstants.RandomStringCharSource.randomElement()! })
+    internal static func randomData(length: Int) -> Data {
+        var data = Data(count: length)
+        if length != 0 {
+            let eCode = data.withUnsafeMutableBytes { buff in
+                return SecRandomCopyBytes(kSecRandomDefault, length, buff.baseAddress!)
+            }
+            assert(eCode == errSecSuccess)
+        }
+        return data
     }
     
     // Based on https://stackoverflow.com/questions/25388747/sha256-in-swift
@@ -86,7 +90,7 @@ final class CryptoHelper {
     }
 
     public static func encrypt(password: String, data: Data) -> Data {
-        let iv = self.randomString(length: CryptoConstants.IVSize).data(using: .utf8)!
+        let iv = self.randomData(length: CryptoConstants.IVSize)
         return iv + self.cryptoOp(password: password, data: data, operation: CCOperation(kCCEncrypt), iv: iv)
     }
 
