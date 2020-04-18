@@ -12,9 +12,9 @@ final class CryptoConstants {
     // Use AES256 in CBC mode
     internal static let Algorithm = CCAlgorithm(kCCAlgorithmAES)
     internal static let KeySize = kCCKeySizeAES256
-    internal static let Options = CCOptions(kCCOptionECBMode | kCCOptionPKCS7Padding)
-    internal static let IVSize = kCCBlockSizeAES128 // ECB mode -> no IV needed
+    internal static let Options = CCOptions(kCCOptionPKCS7Padding)
     internal static let BlockSize = kCCBlockSizeAES128 // AES256 uses the same block size as AES128
+    internal static let IVSize = CryptoConstants.BlockSize // AES IV size is same as block size
 
     internal static let RandomStringCharSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 }
@@ -52,29 +52,36 @@ final class CryptoHelper {
     internal static func cryptoOp(password: String, data input: Data, operation: CCOperation, iv: Data) -> Data {
         let key = self.passwordToKey(password: password, size: CryptoConstants.KeySize)
         
-        let keyBuffer = key.withUnsafeBytes { return $0 }
-        let ivBuffer = iv.withUnsafeBytes { return $0 }
-
-        let inputBuffer = input.withUnsafeBytes { return $0 }
-
         var output = Data(count: input.count + CryptoConstants.BlockSize)
-        let outputBuffer = output.withUnsafeMutableBytes { return $0 }
-        
+
         var nOutputedBytes = 0
-        let cryptStatus = CCCrypt(
-            operation,
-            CryptoConstants.Algorithm,
-            CryptoConstants.Options,
-            keyBuffer.baseAddress,    // Key
-            keyBuffer.count,
-            ivBuffer.baseAddress,     // IV
-            inputBuffer.baseAddress,  // Input
-            inputBuffer.count,
-            outputBuffer.baseAddress, // Output
-            outputBuffer.count,
-            &nOutputedBytes           // Result
-        )
-        assert(cryptStatus == kCCSuccess)
+        var operationStatus = CCCryptorStatus(0)
+        input.withUnsafeBytes { inputBuffer in
+            key.withUnsafeBytes { keyBuffer in
+                iv.withUnsafeBytes { ivBuffer in
+                    output.withUnsafeMutableBytes { outputBuffer in
+                        operationStatus = CCCrypt(
+                            operation,
+                            CryptoConstants.Algorithm,
+                            CryptoConstants.Options,
+                            keyBuffer.baseAddress,    // Key
+                            keyBuffer.count,
+                            ivBuffer.baseAddress,     // IV
+                            inputBuffer.baseAddress,  // Input
+                            inputBuffer.count,
+                            outputBuffer.baseAddress, // Output
+                            outputBuffer.count,
+                            &nOutputedBytes           // Result
+                        )
+                    }
+                }
+            }
+        }
+        assert(operationStatus == kCCSuccess)
+
+        // Truncate output to what the operation actually wrote
+        output.count = nOutputedBytes
+
         return output
     }
 
