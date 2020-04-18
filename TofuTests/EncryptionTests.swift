@@ -11,7 +11,7 @@ import XCTest
 
 class EncryptionTests: XCTestCase {
     func testEncDec() {
-        let data = "example".data(using: .ascii)!
+        let data = "example".data(using: .utf8)!
         
         let helper = CryptoHelper()
         let password = "password"
