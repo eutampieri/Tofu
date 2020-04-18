@@ -13,10 +13,9 @@ class EncryptionTests: XCTestCase {
     func testEncDec() {
         let data = "example".data(using: .utf8)!
         
-        let helper = CryptoHelper()
         let password = "password"
-        let encrypted = helper.encrypt(password: password, data: data)
-        let decrypted = helper.decrypt(password: password, data: encrypted)
+        let encrypted = CryptoHelper.encrypt(password: password, data: data)
+        let decrypted = CryptoHelper.decrypt(password: password, data: encrypted)
         print("\(decrypted.base64EncodedString())")
         
         XCTAssertEqual(data, decrypted)
