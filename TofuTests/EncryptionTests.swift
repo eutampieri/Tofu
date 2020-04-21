@@ -10,15 +10,13 @@ import XCTest
 @testable import Tofu
 
 class EncryptionTests: XCTestCase {
-    func testEncDec() {
-        let data = "example".data(using: .ascii)!
-        
-        let helper = CryptoHelper()
+    func testRoundtrip() {
+        let data = "example".data(using: .utf8)!
+
         let password = "password"
-        let encrypted = helper.encrypt(password: password, data: data)
-        let decrypted = helper.decrypt(password: password, data: encrypted)
-        print("\(decrypted.base64EncodedString())")
-        
+        let encrypted = CryptoHelper.encrypt(password: password, data: data)
+        let decrypted = CryptoHelper.decrypt(password: password, data: encrypted)
+
         XCTAssertEqual(data, decrypted)
     }
 }

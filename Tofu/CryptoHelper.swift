@@ -8,15 +8,30 @@
 
 import Foundation
 
+final class CryptoConstants {
+    // Use AES256 in CBC mode
+    internal static let Algorithm = CCAlgorithm(kCCAlgorithmAES)
+    internal static let KeySize = kCCKeySizeAES256
+    internal static let Options = CCOptions(kCCOptionPKCS7Padding)
+    internal static let BlockSize = kCCBlockSizeAES128 // AES256 uses the same block size as AES128
+    internal static let IVSize = CryptoConstants.BlockSize // AES IV size is same as block size
+}
+
+// Based on https://github.com/DigitalLeaves/CommonCrypto-in-Swift
 final class CryptoHelper {
-    ///https://stackoverflow.com/questions/26845307/generate-random-alphanumeric-string-in-swift
-    internal func randomString(length: Int) -> String {
-      let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-      return String((0..<length).map{ _ in letters.randomElement()! })
+    internal static func randomData(length: Int) -> Data {
+        var data = Data(count: length)
+        if length != 0 {
+            let eCode = data.withUnsafeMutableBytes { buff in
+                return SecRandomCopyBytes(kSecRandomDefault, length, buff.baseAddress!)
+            }
+            assert(eCode == errSecSuccess)
+        }
+        return data
     }
     
-    /// https://stackoverflow.com/questions/25388747/sha256-in-swift
-    internal func sha256(data : Data) -> Data {
+    // Based on https://stackoverflow.com/questions/25388747/sha256-in-swift
+    internal static func sha256(data : Data) -> Data {
         var hash = [UInt8](repeating: 0,  count: Int(CC_SHA256_DIGEST_LENGTH))
         data.withUnsafeBytes {
             _ = CC_SHA256($0.baseAddress, CC_LONG(data.count), &hash)
@@ -24,9 +39,10 @@ final class CryptoHelper {
         return Data(hash)
     }
 
-    
-    // Transform a password into a key
-    internal func passwordToKey(password: String, size: Int) -> Data {
+    /// Transform a password into a key.
+    ///
+    /// The key is the hashed password, trimmed/padded to length.
+    internal static func passwordToKey(password: String, size: Int) -> Data {
         let pwdData = password.data(using: .utf8, allowLossyConversion: true)!
         let hashed = self.sha256(data: pwdData)
         if hashed.count == size {
@@ -36,65 +52,53 @@ final class CryptoHelper {
             return Data()
         }
     }
-    internal func cryptoOp(password: String, data: Data, operation: CCOperation, iv: Data) -> Data {
-        // MARK: Preparing the encryption/decryption
-        /// We're encrypting using AES256, CBC mode
-        /// The block size and IV length are the same for AES128 and AES256.
+
+    internal static func cryptoOp(password: String, data input: Data, operation: CCOperation, iv: Data) -> Data {
+        let key = self.passwordToKey(password: password, size: CryptoConstants.KeySize)
         
-        let blockSize = kCCBlockSizeAES128
-        let keySize = kCCKeySizeAES256
-        let algorithm = CCAlgorithm(kCCAlgorithmAES)
-        let options = CCOptions(kCCOptionECBMode | kCCOptionPKCS7Padding)
-        
-        // MARK: Preparing data for encryption
-        
-        
-        let key = self.passwordToKey(password: password, size: keySize)
-        // The key is the hashed password, trimmed/padded to length
-        
-        let keyBytes = key.withUnsafeBytes { (bytes: UnsafePointer<UInt8>) -> UnsafePointer<UInt8> in
-            return bytes
+        var output = Data(count: input.count + CryptoConstants.BlockSize)
+
+        var nOutputedBytes = 0
+        var operationStatus = CCCryptorStatus(0)
+        input.withUnsafeBytes { inputBuffer in
+            key.withUnsafeBytes { keyBuffer in
+                iv.withUnsafeBytes { ivBuffer in
+                    output.withUnsafeMutableBytes { outputBuffer in
+                        operationStatus = CCCrypt(
+                            operation,
+                            CryptoConstants.Algorithm,
+                            CryptoConstants.Options,
+                            keyBuffer.baseAddress,    // Key
+                            keyBuffer.count,
+                            ivBuffer.baseAddress,     // IV
+                            inputBuffer.baseAddress,  // Input
+                            inputBuffer.count,
+                            outputBuffer.baseAddress, // Output
+                            outputBuffer.count,
+                            &nOutputedBytes           // Result
+                        )
+                    }
+                }
+            }
         }
-        let dataLength       = Int(data.count)
-        let dataBytes        = data.withUnsafeBytes { (bytes: UnsafePointer<UInt8>) -> UnsafePointer<UInt8> in
-            return bytes
-        }
-        var bufferData       = Data(count: Int(dataLength) + blockSize)
-        let bufferPointer    = bufferData.withUnsafeMutableBytes { (bytes: UnsafeMutablePointer<UInt8>) -> UnsafeMutablePointer<UInt8> in
-            return bytes
-        }
-        let bufferLength     = size_t(bufferData.count)
-        let ivBuffer: UnsafePointer<UInt8>? = iv.withUnsafeBytes({ (bytes: UnsafePointer<UInt8>) -> UnsafePointer<UInt8> in
-            return bytes
-        })
-        var bytesDecrypted   = Int(0)
-        
-        // MARK: Encrypt
-        let cryptStatus = CCCrypt(
-            operation,                  // Operation
-            algorithm,                  // Algorithm
-            options,                    // Options
-            keyBytes,                   // key data
-            keySize,                    // key length
-            ivBuffer,                   // IV buffer
-            dataBytes,                  // input data
-            dataLength,                 // input length
-            bufferPointer,              // output buffer
-            bufferLength,               // output buffer length
-            &bytesDecrypted             // output bytes decrypted real
-        )
-        
-        return bufferData as Data
+        assert(operationStatus == kCCSuccess)
+
+        // Truncate output to what the operation actually wrote
+        output.count = nOutputedBytes
+
+        return output
     }
-    public func encrypt(password: String, data: Data) -> Data {
-        let ivSize = kCCBlockSizeAES128
-        let iv = self.randomString(length: ivSize).data(using: .utf8)!
+
+    public static func encrypt(password: String, data: Data) -> Data {
+        let iv = self.randomData(length: CryptoConstants.IVSize)
         return iv + self.cryptoOp(password: password, data: data, operation: CCOperation(kCCEncrypt), iv: iv)
     }
-    public func decrypt(password: String, data: Data) -> Data {
-        let ivSize = kCCBlockSizeAES128
-        let iv = data.subdata(in: 0 ..< ivSize)
-        assert(iv.count == ivSize)
-        return self.cryptoOp(password: password, data: data.advanced(by: ivSize), operation: CCOperation(kCCDecrypt), iv: iv)
+
+    public static func decrypt(password: String, data: Data) -> Data {
+        let iv = data.subdata(in: 0 ..< CryptoConstants.IVSize)
+        assert(iv.count == CryptoConstants.IVSize)
+
+        let data = data.advanced(by: iv.count)
+        return self.cryptoOp(password: password, data: data, operation: CCOperation(kCCDecrypt), iv: iv)
     }
 }
