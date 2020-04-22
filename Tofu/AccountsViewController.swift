@@ -14,10 +14,6 @@ class AccountsViewController: UITableViewController, UIImagePickerControllerDele
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        do {
-            print("B64exported: \(try keychain.uncryptedExport().base64EncodedString())")
-            print("B64encrypted: \(try keychain.export(password: "password").base64EncodedString())")
-        } catch { print("FAILED DUMP")}
         accounts = keychain.accounts
         let sortedPersistentRefs = UserDefaults.standard.array(forKey: accountOrderKey) as? [Data] ?? []
         accounts.sort { a, b in
@@ -54,6 +50,10 @@ class AccountsViewController: UITableViewController, UIImagePickerControllerDele
     @IBAction func addAccount(_ sender: Any) {
         present(addAccountAlertController, animated: true, completion: nil)
     }
+    
+    @IBAction func exportKeychain(_ sender: Any) {
+        self.performSegue(withIdentifier: "ExportSegue", sender: self)
+    }
 
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if let navigationController = segue.destination as? UINavigationController {
@@ -65,6 +65,8 @@ class AccountsViewController: UITableViewController, UIImagePickerControllerDele
                     as! ScanningViewController
                 scanningViewController.delegate = self
             }
+        } else if let exportController = segue.destination as? ExportViewController {
+            exportController.keychain = self.keychain
         } else {
             let accountUpdateViewController = segue.destination
                 as! AccountUpdateViewController
